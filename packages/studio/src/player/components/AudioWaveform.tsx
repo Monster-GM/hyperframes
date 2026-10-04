@@ -5,7 +5,7 @@ import { createThumbnailKey, type ThumbnailPriority } from "../lib/thumbnailSche
 import { decimatePeaks, loudnessToOpacity } from "./audioWaveformPeaks";
 import { ClipFadesContext, type ClipFadeShape } from "./TimelineClipFades";
 import { studioApiFetch } from "../../utils/studioApiFetch";
-import { readWaveformViewport, type WaveformViewport } from "./audioWaveformViewport";
+import type { WaveformViewport } from "./audioWaveformViewport";
 import { useWaveformViewport } from "./useWaveformViewport";
 
 export interface AudioWaveformProps {
@@ -209,10 +209,8 @@ export const AudioWaveform = memo(function AudioWaveform({
 
   const fades = useContext(ClipFadesContext);
   const draw = useCallback(
-    (canvas: HTMLCanvasElement) => {
-      const container = canvas.parentElement;
-      if (!container || !peaks) return;
-      const viewport = readWaveformViewport(container);
+    (canvas: HTMLCanvasElement, viewport: WaveformViewport) => {
+      if (!peaks) return;
       canvas.style.left = `${viewport.displayLeft ?? viewport.left}px`;
       canvas.style.width = `${viewport.displayWidth ?? viewport.width}px`;
       drawWaveformCanvas(

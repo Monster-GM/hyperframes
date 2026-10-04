@@ -4,6 +4,9 @@ export interface WaveformViewport {
   fullWidth: number;
   left: number;
   width: number;
+  /** Visible (non-overscanned) range in the clip's local coordinate space. */
+  visibleLeft?: number;
+  visibleWidth?: number;
   displayLeft?: number;
   displayWidth?: number;
   bitmapWidth?: number;
@@ -53,13 +56,18 @@ export function readWaveformViewport(container: HTMLElement): WaveformViewport {
   const viewport = container.closest("[data-timeline-scroll-viewport]");
   if (!(viewport instanceof HTMLElement)) return { fullWidth, left: 0, width: fullWidth };
   const bounds = container.getBoundingClientRect();
-  const visible = getWaveformViewport(
+  const viewportBounds = viewport.getBoundingClientRect();
+  const viewportLeft = viewportBounds.left + viewport.clientLeft;
+  const visibleLeft = Math.min(fullWidth, Math.max(0, viewportLeft - bounds.left));
+  const visibleRight = Math.min(
     fullWidth,
-    bounds.left,
-    viewport.getBoundingClientRect().left + viewport.clientLeft,
-    viewport.clientWidth,
+    Math.max(0, viewportLeft + viewport.clientWidth - bounds.left),
   );
-  return bounds.width > 0
-    ? alignWaveformViewport(visible, bounds.width, window.devicePixelRatio || 1)
-    : visible;
+  const visibleWidth = Math.max(0, visibleRight - visibleLeft);
+  const visible = getWaveformViewport(fullWidth, bounds.left, viewportLeft, viewport.clientWidth);
+  const aligned =
+    bounds.width > 0
+      ? alignWaveformViewport(visible, bounds.width, window.devicePixelRatio || 1)
+      : visible;
+  return { ...aligned, visibleLeft, visibleWidth };
 }
