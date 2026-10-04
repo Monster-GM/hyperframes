@@ -14,6 +14,7 @@ const state = vi.hoisted(() => {
   const showIds: string[] = [];
   return {
     showIds,
+    transparentLower: false,
     read: vi.fn<
       (fd: number, buffer: Buffer, offset: number, length: number, position: number) => number
     >(),
@@ -40,7 +41,9 @@ vi.mock("@hyperframes/engine", async (importOriginal) => {
       data:
         png.toString() === "upper"
           ? Uint8Array.from([255, 255, 255, 255, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0])
-          : Uint8Array.from([255, 0, 0, 255, 255, 0, 0, 255, 255, 0, 0, 255, 255, 0, 0, 255]),
+          : state.transparentLower
+            ? Uint8Array.from([255, 0, 0, 255, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0])
+            : Uint8Array.from([255, 0, 0, 255, 255, 0, 0, 255, 255, 0, 0, 255, 255, 0, 0, 255]),
     })),
     blitRgb48leRegion: vi.fn(actual.blitRgb48leRegion),
   };
@@ -164,6 +167,7 @@ describe("compositeHdrFrame occluded leading DOM", () => {
   beforeEach(() => {
     vi.clearAllMocks();
     state.showIds = [];
+    state.transparentLower = false;
     state.read.mockReset();
     state.read.mockImplementation((_fd, buffer, offset, length) => {
       buffer.fill(32, offset, offset + length);
@@ -177,7 +181,7 @@ describe("compositeHdrFrame occluded leading DOM", () => {
     ["opaque threshold", { opacity: 0.999 }],
     ["2D identity", { transform: "matrix(1, 0, 0, 1, 0, 0)" }],
     ["3D identity", { transform: "matrix3d(1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1)" }],
-    ["injected native video", { visible: false }],
+    ["injected native video", { visible: false, renderFrameVisible: true }],
   ])(
     "drops only the lower screenshot with %s and preserves legacy pixels",
     async (_name, overrides) => {
@@ -204,6 +208,7 @@ describe("compositeHdrFrame occluded leading DOM", () => {
   );
 
   const ineligible: [string, Partial<ElementStackingInfo>][] = [
+    ["out-of-window video", { visible: false, renderFrameVisible: false }],
     ["partial opacity", { opacity: 0.998 }],
     ["invalid opacity", { opacity: NaN }],
     ["infinite opacity", { opacity: Infinity }],
@@ -328,6 +333,35 @@ describe("compositeHdrFrame occluded leading DOM", () => {
     expect(blitRgb48leRegion).toHaveBeenCalledTimes(2);
     expect(captureAlphaPng).toHaveBeenCalledTimes(2);
     expect(canvas).toEqual(legacy);
+  });
+
+  it("clears partial candidate pixels before replay when the replay read fails", async () => {
+    const stacking = makeStacking();
+    state.transparentLower = true;
+
+    const expectedContext = makeCompositeContext();
+    expectedContext.hdrVideoFrameSources.clear();
+    const expected = Buffer.alloc(24);
+    await compositeHdrFrame(expectedContext, expected, 0, stacking);
+
+    vi.clearAllMocks();
+    state.read
+      .mockImplementationOnce((_fd, buffer, offset, length) => {
+        buffer.fill(32, offset, offset + length);
+        return length;
+      })
+      .mockImplementationOnce(() => 0);
+    vi.mocked(blitRgb48leRegion).mockImplementationOnce((canvas) => {
+      canvas.fill(255);
+      throw new Error("Partial blit");
+    });
+
+    const canvas = Buffer.alloc(24);
+    await compositeHdrFrame(makeCompositeContext(), canvas, 0, stacking);
+
+    expect(state.read).toHaveBeenCalledTimes(2);
+    expect(captureAlphaPng).toHaveBeenCalledTimes(2);
+    expect(canvas).toEqual(expected);
   });
 
   it("preserves lower and upper DOM when both video attempts fail", async () => {

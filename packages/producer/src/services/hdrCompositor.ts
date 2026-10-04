@@ -494,7 +494,11 @@ function findOccludingHdrVideoLayer(
   if (ctx.compositeTransfer === "srgb" || layers[0]?.type !== "dom") return null;
   const index = layers.findIndex((layer, layerIndex) => {
     if (layerIndex === 0) return false;
-    return layer.type === "dom" || layer.element.opacity !== 0;
+    return (
+      layer.type === "dom" ||
+      (layer.element.opacity > 0 &&
+        (layer.element.visible || layer.element.renderFrameVisible === true))
+    );
   });
   const layer = layers[index];
   if (!layer || layer.type !== "hdr") return null;
@@ -519,6 +523,7 @@ function findOccludingHdrVideoLayer(
     !Number.isFinite(el.opacity) ||
     el.opacity < OPAQUE_ALPHA_THRESHOLD ||
     el.opacity > 1 ||
+    !(el.visible || el.renderFrameVisible === true) ||
     el.x !== 0 ||
     el.y !== 0 ||
     el.width !== ctx.width ||
